@@ -1,8 +1,9 @@
 # Secrets
 .env
 
-# Your raw resume / personal source files (the compiled knowledge/about_me.md is fine to keep)
+# Your raw resume / personal source files + compiled personal knowledge
 knowledge/resume.*
+knowledge/about_me.md
 
 # Python
 .venv/
