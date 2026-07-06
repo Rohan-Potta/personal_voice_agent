@@ -1,0 +1,21 @@
+# Pipecat voice framework with the providers we use:
+#   deepgram = speech-to-text   |  groq = LLM brain (Llama)  |  cartesia = text-to-speech
+#   webrtc   = browser transport (talk to the bot in your browser, no phone needed)
+#   silero   = local voice-activity detection (turn taking), runs on-device for free
+pipecat-ai[deepgram,groq,cartesia,webrtc,silero]
+
+# Windows fix: pipecat pulls onnxruntime 1.24.x, whose native DLL fails to initialize on
+# some Windows machines ("DLL initialization routine failed"). 1.19.2 is stable and works
+# the same for Silero VAD. Must be installed AFTER pipecat with --no-deps (see README).
+# onnxruntime==1.19.2   # installed via the separate command in the README
+
+# Pipecat's dev runner (serves the local browser test page + WebRTC signaling)
+fastapi
+uvicorn
+pipecat-ai-prebuilt   # the browser test page the dev runner serves at http://localhost:7860
+
+# Config + knowledge ingestion
+python-dotenv      # loads API keys from .env
+pypdf              # extract text from your resume PDF
+requests           # fetch your portfolio / GitHub page (one-time, during ingest)
+beautifulsoup4     # clean text out of fetched HTML pages

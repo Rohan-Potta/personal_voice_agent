@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Your raw resume / personal source files (the compiled knowledge/about_me.md is fine to keep)
+knowledge/resume.*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Pipecat / model caches
+*.onnx
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
