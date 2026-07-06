@@ -5,12 +5,16 @@ every call. That's deliberate: your background is small and static, so this is s
 and more accurate than embeddings/RAG, and it stays 100% local.
 """
 
+import os
 from pathlib import Path
 
-# --- Edit these to match you -------------------------------------------------
-OWNER_NAME = "Rohan Potta"          # whose background this agent represents
-ASSISTANT_NAME = "Rohan's assistant"  # how the agent refers to itself
-# -----------------------------------------------------------------------------
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# Set OWNER_NAME in your .env — the person this agent answers calls for.
+OWNER_NAME = os.getenv("OWNER_NAME", "the owner")
+ASSISTANT_NAME = f"{OWNER_NAME.split()[0]}'s assistant"
 
 KNOWLEDGE_FILE = Path(__file__).parent / "knowledge" / "about_me.md"
 
@@ -18,7 +22,10 @@ KNOWLEDGE_FILE = Path(__file__).parent / "knowledge" / "about_me.md"
 def load_knowledge() -> str:
     """Read the compiled about_me.md. Run ingest.py to (re)generate it."""
     if not KNOWLEDGE_FILE.exists():
-        return "(No knowledge file found yet. Run `python ingest.py` to create knowledge/about_me.md.)"
+        return (
+            "(No knowledge file found yet. Run `python ingest.py` to create knowledge/about_me.md, "
+            "or copy knowledge/about_me.example.md to knowledge/about_me.md and fill it in.)"
+        )
     return KNOWLEDGE_FILE.read_text(encoding="utf-8").strip()
 
 

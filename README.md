@@ -1,29 +1,59 @@
 # Personal HR-Screening Voice Agent
 
-An AI voice agent that answers screening calls on your behalf. A recruiter talks to it, and it
-answers questions about your background (experience, skills, projects) from your resume / portfolio.
+An AI voice agent that answers recruiter screening calls **on your behalf**. A recruiter talks to
+it in natural speech, and it answers questions about your background — experience, skills,
+projects, availability — from your resume and portfolio. It introduces itself honestly as your AI
+assistant (it doesn't pretend to be you), refuses to invent facts, and offers to take a message
+for anything it doesn't know.
 
-**Stack (all free to start):** Pipecat · Deepgram (speech-to-text) · Groq/Llama (LLM brain) ·
-Cartesia (text-to-speech). You test it **in your browser** first — no phone number needed.
+You test it **in your browser** — no phone number needed.
 
 ```
-your voice → Deepgram (STT) → Groq/Llama (brain + your info) → Cartesia (TTS) → speaker
+caller's voice ──► Deepgram (speech-to-text) ──► Groq/Llama (brain + your info) ──► Cartesia (text-to-speech) ──► speaker
 ```
 
-## 1. Setup (once)
+Built on [Pipecat](https://github.com/pipecat-ai/pipecat). Every provider is on a free tier, so
+running the POC costs ~$0.
+
+## Quick start
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/Rohan-Potta/personal_voice_agent.git
+cd personal_voice_agent
+python -m venv .venv
+```
+
+Activate the venv:
 
 ```powershell
-# from the project folder
-python -m venv .venv
+# Windows (PowerShell)
 .\.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Then install dependencies:
+
+```bash
 pip install -r requirements.txt
-# Windows fix for an onnxruntime DLL load error (used by the voice-activity detector):
+```
+
+**Windows only** — if `bot.py` later fails with a "DLL initialization routine failed" error from
+onnxruntime, pin the older runtime (same functionality for the voice-activity detector):
+
+```bash
 pip install onnxruntime==1.19.2 --no-deps
 ```
 
-## 2. Add your API keys
+### 2. Configure your name + API keys
 
-Copy `.env.example` to `.env` and paste in your three keys (all free):
+Copy `.env.example` to `.env`, set `OWNER_NAME` to your full name, and paste in your three keys
+(all free):
 
 | Key | Where to get it | Cost |
 |-----|-----------------|------|
@@ -31,35 +61,79 @@ Copy `.env.example` to `.env` and paste in your three keys (all free):
 | `GROQ_API_KEY` | https://console.groq.com/keys | free |
 | `CARTESIA_API_KEY` | https://play.cartesia.ai → API Keys | free tier |
 
-## 3. Add your info
+`.env` is gitignored — your keys and name never get committed.
 
-Put your resume in `knowledge/resume.pdf`, then compile it (plus any links) into the agent's knowledge:
+### 3. Add your info
 
-```powershell
+The agent answers only from one local file: `knowledge/about_me.md` (gitignored, so your personal
+info stays on your machine). Create it one of two ways:
+
+**Option A — generate it from your resume / links:**
+
+```bash
 python ingest.py --resume knowledge/resume.pdf --url https://your-portfolio.com --url https://github.com/yourname
 ```
 
-This writes `knowledge/about_me.md`. Open it and tidy it up if you like — the agent reads it verbatim.
-(You only re-run this when your resume/portfolio changes. You can also just edit `about_me.md` by hand.)
+**Option B — write it by hand:**
 
-Set your name in `persona.py` (`OWNER_NAME`).
+```bash
+cp knowledge/about_me.example.md knowledge/about_me.md
+# then open it and fill in each section
+```
 
-## 4. Talk to it
+Either way, open `knowledge/about_me.md` afterwards and tidy it up — the agent reads it verbatim,
+so the cleaner it is, the better the agent sounds. Re-run/re-edit only when your info changes.
 
-```powershell
+### 4. Talk to it
+
+```bash
 python bot.py
 ```
 
-Open the printed URL (http://localhost:7860), click **Connect**, allow the microphone, and start talking.
+Open http://localhost:7860, click **Connect**, allow the microphone, and start talking. The bot
+greets you first; there's no push-to-talk — just speak, and the conversation transcript appears
+live in the page.
 
-## Tweaking
+Try asking it: *"How many years of experience do they have?"*, *"What projects have they worked
+on?"*, *"How do I get in touch?"* — and something that's NOT in your file, to confirm it admits
+not knowing instead of making things up.
 
-- **Voice:** preview voices at https://play.cartesia.ai and set `CARTESIA_VOICE` in `bot.py`.
-- **Persona / guardrails:** edit `persona.py`.
-- **Smarter brain:** change `GROQ_MODEL` in `bot.py`, or swap `GroqLLMService` for Claude later.
+## Customizing
 
-## Later: real phone calls
+- **Voice:** preview voices at https://play.cartesia.ai and paste a voice ID into
+  `CARTESIA_VOICE` in `bot.py`.
+- **Brain:** change `GROQ_MODEL` in `bot.py`, or swap `GroqLLMService` for any other Pipecat LLM
+  service (e.g. Claude) — it's a one-class change.
+- **Persona & guardrails:** edit the system prompt in `persona.py` (tone, what it may promise,
+  how it handles contact info, etc.).
+- **Greeting:** edit the `on_client_connected` handler in `bot.py`.
 
-This POC runs in the browser. To take real calls you add a telephony provider (Twilio): buy a number,
-run a small server with Pipecat's `FastAPIWebsocketTransport` + `TwilioFrameSerializer`, and point the
-number's webhook at it. The STT → LLM → TTS core stays exactly the same. (Not built yet — next phase.)
+## Project structure
+
+```
+.env.example                 # template for your name + API keys (copy to .env)
+requirements.txt             # pinned Python deps
+ingest.py                    # one-time: resume PDF + URLs -> knowledge/about_me.md
+persona.py                   # system prompt: persona, guardrails, loads your knowledge
+bot.py                       # the Pipecat pipeline + dev server (entry point)
+knowledge/
+  about_me.example.md        # template for your background (committed)
+  about_me.md                # YOUR background — gitignored, created by you
+```
+
+## Troubleshooting
+
+- **`ModuleNotFoundError` when running `bot.py`** — your venv isn't activated. Activate it (step 1)
+  and try again.
+- **`http://localhost:7860` returns 404 / "Prebuilt frontend not available"** — the
+  `pipecat-ai-prebuilt` package is missing; `pip install -r requirements.txt` inside the venv.
+- **Bot connects but never hears you** — check the mic mute button in the page (red = muted), make
+  sure the right microphone is selected in the Devices dropdown, and close other tabs that are
+  holding the mic (browser shows "Microphone in use").
+- **onnxruntime DLL error on Windows** — see the pin command in step 1.
+
+## Roadmap: real phone calls
+
+This POC runs in the browser. To answer real calls, add a telephony provider (e.g. Twilio): buy a
+number, run a small server using Pipecat's `FastAPIWebsocketTransport` + `TwilioFrameSerializer`,
+and point the number's webhook at it. The STT → LLM → TTS core stays exactly the same.
