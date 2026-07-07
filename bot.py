@@ -46,7 +46,7 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
-from persona import build_system_prompt
+from persona import OWNER_NAME, build_system_prompt
 
 load_dotenv(override=True)
 
@@ -64,6 +64,8 @@ IDLE_TIMEOUT_SECS = 10.0
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     logger.info("Starting bot")
+
+    first_name = OWNER_NAME.split()[0]
 
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 
@@ -153,8 +155,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
                 {
                     "role": "developer",
                     "content": (
-                        "The caller has gone quiet. Briefly and politely ask if "
-                        "there's anything else you can help with."
+                        "The caller has gone quiet for a moment. Check in warmly and "
+                        "casually in ONE short sentence, like a friendly human would - "
+                        'for example "Still there? No rush at all." or "Take your time - '
+                        f'anything else you\'d like to know about {first_name}?" '
+                        "Vary the phrasing naturally. Do NOT list topics, skills, or "
+                        "things you can talk about, and do NOT re-introduce yourself."
                     ),
                 }
             )
@@ -174,9 +180,14 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             {
                 "role": "developer",
                 "content": (
-                    "Greet the caller warmly, introduce yourself as an AI assistant "
-                    "that can answer questions about the person you represent, and ask "
-                    "who's calling and how you can help."
+                    f"Open the call with a greeting along these lines, in your own words: "
+                    f"\"Hello! You've reached {first_name}'s line - I'm his AI assistant, and I help "
+                    f"answer questions about his work and experience when he's not available. "
+                    f"May I know who's calling?\" "
+                    f"ALWAYS start with a warm greeting word like 'Hello!' before anything else. "
+                    f"Keep it to two short, warm, natural-sounding sentences plus the question. "
+                    f"Don't say 'How can I help you today' - asking who's calling is enough. "
+                    f"After they introduce themselves, greet them by name once and invite their questions."
                 ),
             }
         )
