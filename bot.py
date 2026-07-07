@@ -21,7 +21,14 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 
 logger.info("✅ Silero VAD model loaded")
 
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.frames.frames import (
+    EndTaskFrame,
+    FunctionCallResultProperties,
+    LLMRunFrame,
+    TTSSpeakFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -30,6 +37,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.cartesia.tts import CartesiaTTSService
@@ -67,7 +76,35 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         ),
     )
 
-    context = LLMContext()
+    async def end_call(params: FunctionCallParams):
+        """Speak a fixed goodbye, then end the pipeline gracefully.
+
+        On a Twilio call the serializer then hangs up via the Twilio API
+        (using TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN); in the browser the
+        session just ends.
+        """
+        logger.info("Caller is done — ending the call")
+        # Don't run the LLM again on the function result; the goodbye below is the last word.
+        await params.result_callback(
+            {"status": "call ended"},
+            properties=FunctionCallResultProperties(run_llm=False),
+        )
+        await params.llm.push_frame(TTSSpeakFrame("Thanks for calling. Have a great day. Goodbye!"))
+        await params.llm.push_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
+
+    llm.register_function("end_call", end_call)
+
+    end_call_tool = FunctionSchema(
+        name="end_call",
+        description=(
+            "Hang up the phone call. Use when the caller says goodbye, says they're done, "
+            "has no more questions, or asks to end the call."
+        ),
+        properties={},
+        required=[],
+    )
+
+    context = LLMContext(tools=ToolsSchema(standard_tools=[end_call_tool]))
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
