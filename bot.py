@@ -117,8 +117,14 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
 async def bot(runner_args: RunnerArguments):
     """Entry point used by Pipecat's dev runner."""
+    from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
+
     transport_params = {
+        # Browser testing:  python bot.py
         "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+        # Real phone calls: python bot.py -t twilio -x <public-https-host>
+        # (serializer + audio format are set automatically from TWILIO_* env vars)
+        "twilio": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
     }
     transport = await create_transport(runner_args, transport_params)
     await run_bot(transport, runner_args)
