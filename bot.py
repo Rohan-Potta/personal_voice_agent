@@ -57,6 +57,10 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 # Cartesia voice. Browse/preview voices at https://play.cartesia.ai and paste an ID here.
 CARTESIA_VOICE = "71a7ad14-091c-4e8e-a314-022ece01c121"  # British Reading Lady
 
+# Seconds of caller silence (after the agent finishes talking) before the agent checks in.
+# A second timeout with no reply ends the call.
+IDLE_TIMEOUT_SECS = 10.0
+
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     logger.info("Starting bot")
@@ -107,7 +111,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     context = LLMContext(tools=ToolsSchema(standard_tools=[end_call_tool]))
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(),
+            user_idle_timeout=IDLE_TIMEOUT_SECS,
+        ),
     )
 
     pipeline = Pipeline(
@@ -126,6 +133,38 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         pipeline,
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
     )
+
+    # Silence handling: after IDLE_TIMEOUT_SECS of no reply, check in once; if the
+    # caller stays silent for another timeout, say goodbye and hang up.
+    idle_nudges = 0
+
+    @user_aggregator.event_handler("on_user_turn_started")
+    async def on_user_turn_started(aggregator):
+        nonlocal idle_nudges
+        idle_nudges = 0
+
+    @user_aggregator.event_handler("on_user_turn_idle")
+    async def on_user_turn_idle(aggregator):
+        nonlocal idle_nudges
+        idle_nudges += 1
+        if idle_nudges == 1:
+            logger.info("Caller idle — checking in")
+            context.add_message(
+                {
+                    "role": "developer",
+                    "content": (
+                        "The caller has gone quiet. Briefly and politely ask if "
+                        "there's anything else you can help with."
+                    ),
+                }
+            )
+            await task.queue_frames([LLMRunFrame()])
+        else:
+            logger.info("Caller still idle — ending the call")
+            await task.queue_frames(
+                [TTSSpeakFrame("It sounds like you're all set, so I'll let you go. Thanks for calling. Goodbye!")]
+            )
+            await task.stop_when_done()
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
