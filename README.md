@@ -1,6 +1,6 @@
 # Personal HR-Screening Voice Agent
 
-🎥 **Here is a demo: https://drive.google.com/file/d/1-kRtGCASSPWa09K8USVhTQ79TlB1CtiS/view?usp=sharing
+🎥 **Here is a demo:** [watch the agent take a screening call](https://drive.google.com/file/d/1-kRtGCASSPWa09K8USVhTQ79TlB1CtiS/view?usp=sharing)
 
 An AI voice agent that answers recruiter screening calls **on your behalf**. A recruiter talks to
 it in natural speech, and it answers questions about your background — experience, skills,
