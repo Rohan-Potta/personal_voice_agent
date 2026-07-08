@@ -132,8 +132,95 @@ knowledge/
   holding the mic (browser shows "Microphone in use").
 - **onnxruntime DLL error on Windows** — see the pin command in step 1.
 
-## Roadmap: real phone calls
+## Real phone calls (Twilio)
 
-This POC runs in the browser. To answer real calls, add a telephony provider (e.g. Twilio): buy a
-number, run a small server using Pipecat's `FastAPIWebsocketTransport` + `TwilioFrameSerializer`,
-and point the number's webhook at it. The STT → LLM → TTS core stays exactly the same.
+The agent also answers real phone calls. The STT → LLM → TTS core is identical — a phone call is
+just a different transport, enabled with `-t twilio`. The agent hangs up on its own when the
+caller says goodbye, or after two silence timeouts (a friendly check-in, then a farewell).
+
+### 1. Twilio setup
+
+1. Sign up at https://www.twilio.com/try-twilio (free trial credit) and buy a trial number.
+2. From the [Console](https://console.twilio.com) dashboard's **Account Info** panel, copy your
+   **Account SID** and **Auth Token** into `.env`:
+
+   ```
+   TWILIO_ACCOUNT_SID=ACxxxxxxxx
+   TWILIO_AUTH_TOKEN=xxxxxxxx
+   ```
+
+   (These let the agent terminate the call cleanly when it hangs up.)
+3. Trial accounts only accept calls from **Verified Caller IDs** — your own number gets verified
+   during signup; add others under Phone Numbers → Manage → Verified Caller IDs.
+
+### 2. Expose the bot over HTTPS
+
+Twilio streams call audio over a **secure websocket (`wss://`) and requires a valid TLS
+certificate** — a bare IP or plain HTTP won't work. Two options:
+
+**Option A — ngrok (quickest, for testing):**
+
+```bash
+ngrok http 7860                                  # note the https host it gives you
+python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no scheme
+```
+
+**Option B — an always-on server (what a real deployment looks like, e.g. AWS EC2):**
+
+1. On the server: clone the repo, create the venv, `pip install -r requirements.txt`.
+2. Copy your personal files over manually — they're gitignored, so they don't come with the
+   clone: `scp .env knowledge/about_me.md user@server:personal_voice_agent/...`
+3. On a small instance (1 GB RAM), add swap first:
+   `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
+4. **TLS:** Let's Encrypt refuses `*.amazonaws.com` hostnames, so use an
+   [sslip.io](https://sslip.io) name — e.g. for public IP `3.110.29.178` the hostname
+   `3-110-29-178.sslip.io` resolves to it automatically. Install [Caddy](https://caddyserver.com)
+   and point `/etc/caddy/Caddyfile` at the bot; Caddy fetches and renews the certificate itself:
+
+   ```
+   3-110-29-178.sslip.io {
+       reverse_proxy localhost:7860
+   }
+   ```
+
+   Open ports **80 and 443** in the instance's security group (443 for calls, 80/443 for the
+   certificate challenge).
+5. Run the bot as a systemd service so it survives reboots (`/etc/systemd/system/voice-agent.service`):
+
+   ```ini
+   [Unit]
+   Description=Voice agent (Pipecat + Twilio)
+   After=network-online.target
+
+   [Service]
+   User=ubuntu
+   WorkingDirectory=/home/ubuntu/personal_voice_agent
+   ExecStart=/home/ubuntu/personal_voice_agent/.venv/bin/python bot.py -t twilio -x 3-110-29-178.sslip.io
+   Restart=always
+   RestartSec=5
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   `sudo systemctl daemon-reload && sudo systemctl enable --now voice-agent`
+6. Caveat: the sslip.io hostname encodes the IP — if the instance is stopped/started the public
+   IP changes, and the Caddyfile, systemd unit, and Twilio webhook all need the new one (attach
+   an Elastic IP to avoid this).
+
+Verify from anywhere: `curl -X POST https://<your-host>/` should return TwiML XML containing
+`wss://<your-host>/ws`.
+
+### 3. Point your Twilio number at it
+
+Twilio Console → **Phone Numbers → Manage → Active numbers** → click your number → **Voice
+Configuration** → under "A call comes in" choose **Webhook**, enter `https://<your-host>/` with
+method **HTTP POST** → **Save configuration**. (Redo this whenever your host changes — e.g. a new
+ngrok URL each session.)
+
+### 4. Call it
+
+Call your Twilio number from a verified phone. You'll hear the trial announcement (press a key if
+prompted), then the agent picks up. Costs on trial: inbound minutes ~$0.01/min from your free
+credit; the *caller* pays their own carrier's rate (international, if calling a US number from
+abroad).
