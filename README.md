@@ -2,9 +2,9 @@
 
 An AI voice agent that answers recruiter screening calls **on your behalf**. A recruiter talks to
 it in natural speech, and it answers questions about your background — experience, skills,
-projects, availability — from your resume and portfolio. It introduces itself honestly as your AI
-assistant (it doesn't pretend to be you), refuses to invent facts, and offers to take a message
-for anything it doesn't know.
+projects — from your resume and portfolio. It introduces itself honestly as your AI assistant
+(it doesn't pretend to be you), refuses to invent facts, and points callers to your email or
+LinkedIn for anything it can't answer.
 
 You test it **in your browser** — no phone number needed.
 
@@ -94,9 +94,8 @@ Open http://localhost:7860, click **Connect**, allow the microphone, and start t
 greets you first; there's no push-to-talk — just speak, and the conversation transcript appears
 live in the page.
 
-Try asking it: *"How many years of experience do they have?"*, *"What projects have they worked
-on?"*, *"How do I get in touch?"* — and something that's NOT in your file, to confirm it admits
-not knowing instead of making things up.
+Try asking it: *"What technical skills do you have?"*, *"What projects have they worked
+on?"*
 
 ## Customizing
 
@@ -112,7 +111,7 @@ not knowing instead of making things up.
 
 ```
 .env.example                 # template for your name + API keys (copy to .env)
-requirements.txt             # pinned Python deps
+requirements.txt             # Python deps
 ingest.py                    # one-time: resume PDF + URLs -> knowledge/about_me.md
 persona.py                   # system prompt: persona, guardrails, loads your knowledge
 bot.py                       # the Pipecat pipeline + dev server (entry point)
@@ -169,7 +168,13 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
 
 1. On the server: clone the repo, create the venv, `pip install -r requirements.txt`.
 2. Copy your personal files over manually — they're gitignored, so they don't come with the
-   clone: `scp .env knowledge/about_me.md user@server:personal_voice_agent/...`
+   clone. Watch the destinations: `.env` belongs in the repo root, `about_me.md` inside
+   `knowledge/` (anywhere else and the agent silently runs with no knowledge):
+
+   ```bash
+   scp .env user@server:personal_voice_agent/
+   scp knowledge/about_me.md user@server:personal_voice_agent/knowledge/
+   ```
 
 3. **Give the server HTTPS (all free).** The bot itself only speaks plain HTTP on port 7860,
    but Twilio will only stream call audio to a URL with a real TLS certificate. Certificates are
@@ -179,7 +184,7 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
 
    - **A free hostname:** [sslip.io](https://sslip.io) gives every IP address a working hostname
      for free, with zero setup — the IP is simply written into the name. If your server's public
-     IP is `3.110.29.178`, then `3-110-29-178.sslip.io` already points at it.
+     IP is `2.130.19.188`, then `2-130-19-188.sslip.io` already points at it.
    - **A free certificate, automatically:** [Caddy](https://caddyserver.com) is a small web
      server you put in front of the bot. Given the two-line config below, it fetches a free
      Let's Encrypt certificate for that hostname on startup, renews it forever, and forwards the
@@ -189,7 +194,7 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
    `sudo systemctl reload caddy`:
 
    ```
-   3-110-29-178.sslip.io {
+   2-130-19-188.sslip.io {
        reverse_proxy localhost:7860
    }
    ```
@@ -198,9 +203,20 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
    connects, and Caddy needs 80/443 reachable to prove to Let's Encrypt that it owns the
    hostname.
 
-4. Caveat: the sslip.io hostname encodes the IP — if the instance is stopped/started the public
-   IP changes, and the Caddyfile, systemd unit, and Twilio webhook all need the new one (attach
-   an Elastic IP to avoid this).
+4. **Run the bot** (from the repo directory, venv activated), telling it its public hostname:
+
+   ```bash
+   python bot.py -t twilio -x 2-130-19-188.sslip.io   # swap in your own IP-hostname
+   ```
+
+   That's enough to test. To keep it running after you log out and across reboots, wrap that
+   exact command in a systemd service — `ExecStart` pointing at the venv's python with the flags
+   above, `WorkingDirectory` set to the repo, `Restart=always` — then
+   `sudo systemctl enable --now` it.
+
+5. Caveat: the sslip.io hostname encodes the IP — if the instance is stopped/started the public
+   IP changes, and the Caddyfile, the `-x` flag in your run command (or systemd service), and
+   the Twilio webhook all need the new one (attach an Elastic IP to avoid this).
 
 Verify from anywhere: `curl -X POST https://<your-host>/` should return TwiML XML containing
 `wss://<your-host>/ws`.
