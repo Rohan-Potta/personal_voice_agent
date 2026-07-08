@@ -41,8 +41,8 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
-from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 
@@ -54,7 +54,13 @@ load_dotenv(override=True)
 # service to Claude later (one import + one class change) if you want higher quality.
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
-# Cartesia voice. Browse/preview voices at https://play.cartesia.ai and paste an ID here.
+# Deepgram Aura voice (TTS). Preview voices at https://playground.deepgram.com/?endpoint=speak
+# Good conversational picks: aura-2-thalia-en (flagship, natural), aura-2-andromeda-en (warm),
+# aura-2-orion-en / aura-2-arcas-en (male). Helena sounded flat/choppy in practice.
+DEEPGRAM_VOICE = "aura-2-thalia-en"
+
+# Cartesia voice — kept for switching back when free-tier credits reset (see tts below).
+# Browse/preview voices at https://play.cartesia.ai and paste an ID here.
 CARTESIA_VOICE = "71a7ad14-091c-4e8e-a314-022ece01c121"  # British Reading Lady
 
 # Seconds of caller silence (after the agent finishes talking) before the agent checks in.
@@ -69,9 +75,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        settings=CartesiaTTSService.Settings(voice=CARTESIA_VOICE),
+    # TTS: Deepgram Aura (runs on the same Deepgram key/credit as STT).
+    # Cartesia sounded slightly nicer but its free tier ran out (HTTP 402); to switch
+    # back: restore the CartesiaTTSService import and swap these lines.
+    tts = DeepgramTTSService(
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
+        settings=DeepgramTTSService.Settings(voice=DEEPGRAM_VOICE),
     )
 
     llm = GroqLLMService(
