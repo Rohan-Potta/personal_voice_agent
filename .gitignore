@@ -18,3 +18,7 @@ __pycache__/
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# Local demo recordings (the demo video is hosted on Google Drive, not in the repo)
+Demo video/
+demo/
