@@ -170,12 +170,23 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
 1. On the server: clone the repo, create the venv, `pip install -r requirements.txt`.
 2. Copy your personal files over manually — they're gitignored, so they don't come with the
    clone: `scp .env knowledge/about_me.md user@server:personal_voice_agent/...`
-3. On a small instance (1 GB RAM), add swap first:
-   `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
-4. **TLS:** Let's Encrypt refuses `*.amazonaws.com` hostnames, so use an
-   [sslip.io](https://sslip.io) name — e.g. for public IP `3.110.29.178` the hostname
-   `3-110-29-178.sslip.io` resolves to it automatically. Install [Caddy](https://caddyserver.com)
-   and point `/etc/caddy/Caddyfile` at the bot; Caddy fetches and renews the certificate itself:
+
+3. **Give the server HTTPS (all free).** The bot itself only speaks plain HTTP on port 7860,
+   but Twilio will only stream call audio to a URL with a real TLS certificate. Certificates are
+   only issued to *domain names* — you can't get one for a bare IP, and Let's Encrypt won't issue
+   one for Amazon's built-in `ec2-....amazonaws.com` names either. That sounds like you need to
+   buy a domain, but you don't:
+
+   - **A free hostname:** [sslip.io](https://sslip.io) gives every IP address a working hostname
+     for free, with zero setup — the IP is simply written into the name. If your server's public
+     IP is `3.110.29.178`, then `3-110-29-178.sslip.io` already points at it.
+   - **A free certificate, automatically:** [Caddy](https://caddyserver.com) is a small web
+     server you put in front of the bot. Given the two-line config below, it fetches a free
+     Let's Encrypt certificate for that hostname on startup, renews it forever, and forwards the
+     (decrypted) traffic to the bot on port 7860. No certbot, no cron jobs, no manual cert steps.
+
+   Install Caddy, then put this in `/etc/caddy/Caddyfile` (swap in your own IP-hostname) and
+   `sudo systemctl reload caddy`:
 
    ```
    3-110-29-178.sslip.io {
@@ -183,28 +194,11 @@ python bot.py -t twilio -x abc123.ngrok-free.app # -x = your public hostname, no
    }
    ```
 
-   Open ports **80 and 443** in the instance's security group (443 for calls, 80/443 for the
-   certificate challenge).
-5. Run the bot as a systemd service so it survives reboots (`/etc/systemd/system/voice-agent.service`):
+   Finally, open ports **80 and 443** in the instance's security group — 443 is where Twilio
+   connects, and Caddy needs 80/443 reachable to prove to Let's Encrypt that it owns the
+   hostname.
 
-   ```ini
-   [Unit]
-   Description=Voice agent (Pipecat + Twilio)
-   After=network-online.target
-
-   [Service]
-   User=ubuntu
-   WorkingDirectory=/home/ubuntu/personal_voice_agent
-   ExecStart=/home/ubuntu/personal_voice_agent/.venv/bin/python bot.py -t twilio -x 3-110-29-178.sslip.io
-   Restart=always
-   RestartSec=5
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-   `sudo systemctl daemon-reload && sudo systemctl enable --now voice-agent`
-6. Caveat: the sslip.io hostname encodes the IP — if the instance is stopped/started the public
+4. Caveat: the sslip.io hostname encodes the IP — if the instance is stopped/started the public
    IP changes, and the Caddyfile, systemd unit, and Twilio webhook all need the new one (attach
    an Elastic IP to avoid this).
 
